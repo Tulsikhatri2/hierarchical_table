@@ -3,76 +3,97 @@ import React, { useState } from 'react';
 // Utility function to calculate variance percentage
 const calculateVariance = (original, updated) => {
   if (original === 0) return 0;
+  if (original == null || updated == null || isNaN(original) || isNaN(updated)) return 0;
   return ((updated - original) / original) * 100;
 };
 
 // Recursive component to render rows
-const Row = ({ row, updateRowValue, updateParentValue, isParent, parentValue, updateChildVariance }) => {
-  const [inputValue, setInputValue] = useState('');
-  const [variance, setVariance] = useState(null);
+const Row = ({ row, updateRowValue, updateParentValue, isParent, parentValue, inputValues, setInputValues }) => {
+  const [variance, setVariance] = useState(row.variance || null);
 
   const handleAllocationPercentage = () => {
-    const percentage = parseFloat(inputValue);
+    const percentage = parseFloat(inputValues[row.id]);
     if (!isNaN(percentage)) {
       const newValue = row.value + (row.value * percentage) / 100;
-      setVariance(calculateVariance(row.value, newValue));
+      const newVariance = calculateVariance(row.value, newValue);
+      setVariance(newVariance); // Set variance for this row
       updateRowValue(row.id, newValue);
       if (isParent) {
-        // Update children proportionally and adjust their variance
-        updateParentValue(row.id, newValue);
+        updateParentValue(row.id, newValue); // Update parent if this is a parent row
       }
     }
   };
 
   const handleAllocationValue = () => {
-    const newValue = parseFloat(inputValue);
+    const newValue = parseFloat(inputValues[row.id]);
     if (!isNaN(newValue)) {
-      setVariance(calculateVariance(row.value, newValue));
+      const newVariance = calculateVariance(row.value, newValue);
+      setVariance(newVariance); // Set variance for this row
       updateRowValue(row.id, newValue);
       if (isParent) {
-        // Update children proportionally and adjust their variance
-        updateParentValue(row.id, newValue);
+        updateParentValue(row.id, newValue); // Update parent if this is a parent row
       }
     }
   };
 
+  const handleChange = (event) => {
+    const { id, value } = event.target;
+    setInputValues((prevState) => ({
+      ...prevState,
+      [id]: value,
+    }));
+  };
+
   return (
-    <tr>
-      <td>
-        {row.label}
-        {row.children && (
-          <ul>
-            {row.children.map((child) => (
-              <li key={child.id}>
-                <Row
-                  row={child}
-                  updateRowValue={updateRowValue}
-                  updateParentValue={updateParentValue}
-                  isParent={false}
-                  parentValue={row.value}
-                  updateChildVariance={updateChildVariance} // Pass updateChildVariance to child rows
-                />
-                {child.variance !== null && <p>Child Variance: {child.variance.toFixed(2)}%</p>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </td>
-      <td>
-        {row.value}
-        <div>
+    <>
+      <tr>
+        <td style={{ textAlign: "center" }}>{row.label}</td>
+        <td style={{ fontWeight: "bold", fontSize: "3vh", textAlign: "center" }}>{row.value}</td>
+        <td style={{ textAlign: "center" }}>
           <input
             type="number"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            id={row.id}  // Use row ID for unique identification
+            value={inputValues[row.id] || ''} // Access value from state
+            onChange={handleChange}
             placeholder="Enter value"
           />
-          <button onClick={handleAllocationPercentage}>Allocation %</button>
-          <button onClick={handleAllocationValue}>Allocation Val</button>
-        </div>
-        {variance !== null && <p>Variance: {variance.toFixed(2)}%</p>}
-      </td>
-    </tr>
+        </td>
+        <td style={{ textAlign: "center" }}>
+          <button onClick={handleAllocationPercentage} style={{ width: "70%" }}>Allocation %</button>
+        </td>
+        <td style={{ textAlign: "center" }}>
+          <button onClick={handleAllocationValue} style={{ width: "70%" }}>Allocation Val</button>
+        </td>
+        <td className="variance" style={{ textAlign: "center" }}>
+          {variance !== null ? `${variance.toFixed(2)}%` : '-'}
+        </td>
+      </tr>
+      {row.children && row.children.length > 0 &&
+        row.children.map((child) => (
+          <tr className="child-row" key={child.id}>
+            <td style={{ textAlign: "center" }}>-- {child.label}</td>
+            <td style={{ textAlign: "center" }}>{child.value.toFixed(2)}</td>
+            <td style={{ textAlign: "center" }}>
+              <input
+                type="number"
+                id={child.id} // Use row ID for unique identification
+                value={inputValues[child.id] || ''} // Access value from state
+                onChange={handleChange}
+                placeholder="Enter value"
+              />
+            </td>
+            <td style={{ textAlign: "center" }}>
+              <button onClick={handleAllocationPercentage} style={{ width: "70%" }}>Allocation %</button>
+            </td>
+            <td style={{ textAlign: "center" }}>
+              <button onClick={handleAllocationValue} style={{ width: "70%" }}>Allocation Val</button>
+            </td>
+            <td className="variance" style={{ textAlign: "center" }}>
+              {variance !== null ? `${variance.toFixed(2)}%` : '-'}
+            </td>
+          </tr>
+        ))}
+    </>
   );
 };
 
@@ -82,6 +103,7 @@ const Table = () => {
       id: 'electronics',
       label: 'Electronics',
       value: 1500,
+      originalValue: 1500,
       children: [
         { id: 'phones', label: 'Phones', value: 800, originalValue: 800, variance: null },
         { id: 'laptops', label: 'Laptops', value: 700, originalValue: 700, variance: null },
@@ -91,6 +113,7 @@ const Table = () => {
       id: 'furniture',
       label: 'Furniture',
       value: 1000,
+      originalValue: 1000,
       children: [
         { id: 'tables', label: 'Tables', value: 300, originalValue: 300, variance: null },
         { id: 'chairs', label: 'Chairs', value: 700, originalValue: 700, variance: null },
@@ -99,14 +122,7 @@ const Table = () => {
   ];
 
   const [data, setData] = useState(initialData);
-
-  // Function to update child variance considering the parent's variance
-  const updateChildVariance = (child, parentVariance) => {
-    // Ensure child's value is updated before calculating variance
-    const childVariance = calculateVariance(child.originalValue, child.value);
-    const adjustedVariance = childVariance * (1 + parentVariance / 100); // Adjust based on parent's variance
-    child.variance = adjustedVariance;
-  };
+  const [inputValues, setInputValues] = useState({});  // Initialize a state to track input values
 
   // Helper function to update a child's value
   const updateRowValue = (id, newValue) => {
@@ -128,54 +144,30 @@ const Table = () => {
     });
 
     setData(updatedData);
-
-    // After updating a child, update the parent value as well
-    // Check if the updated row is a child, and update the parent if necessary
-    data.forEach((row) => {
-      if (row.children) {
-        row.children.forEach((child) => {
-          if (child.id === id) {
-            // Parent's value needs to be recalculated
-            updateParentValue(row.id);
-          }
-        });
-      }
-    });
   };
 
   // Function to update parent value (distribute value to children proportionally)
   const updateParentValue = (id, newParentValue) => {
     const updatedData = data.map((row) => {
       if (row.id === id) {
-        // If a new parent value is passed, use it, otherwise calculate from the children
         const totalChildrenValue = row.children.reduce((sum, child) => sum + child.value, 0);
 
-        // If parent value is being set, we set it
         if (newParentValue !== undefined) {
           row.value = newParentValue;
         } else {
-          // If newParentValue isn't passed, calculate the parent's total based on its children
           row.value = totalChildrenValue;
         }
 
-        // Adjust children values proportionally based on their contribution to the parent's total
         row.children = row.children.map((child) => {
           const childProportion = child.value / totalChildrenValue;
           const newChildValue = row.value * childProportion;
           child.value = newChildValue;
-
-          // Update the child's variance based on the parent variance
-          const parentVariance = calculateVariance(row.originalValue, row.value); // Calculate parent's variance
-          child.variance = calculateVariance(child.originalValue, child.value); // Recalculate the child's variance
-
-          // Adjust the child's variance based on parent's variance proportionally
-          const adjustedVariance = child.variance * (1 + parentVariance / 100);
-          child.variance = adjustedVariance;
-
+          child.variance = calculateVariance(child.originalValue, child.value);
           return child;
         });
-      }
 
+        row.variance = calculateVariance(row.originalValue, row.value);
+      }
       return row;
     });
 
@@ -191,11 +183,15 @@ const Table = () => {
 
   return (
     <div>
-      <table>
+      <table style={{ fontFamily: "monospace" }}>
         <thead>
           <tr>
-            <th>Label</th>
-            <th>Value</th>
+            <th style={{ textAlign: "center" }}>Label</th>
+            <th style={{ textAlign: "center" }}>Value</th>
+            <th style={{ textAlign: "center" }}>Input</th>
+            <th style={{ textAlign: "center" }}>Allocation %</th>
+            <th style={{ textAlign: "center" }}>Allocation Val</th>
+            <th style={{ textAlign: "center" }}>Variance %</th>
           </tr>
         </thead>
         <tbody>
@@ -204,14 +200,15 @@ const Table = () => {
               key={row.id}
               row={row}
               updateRowValue={updateRowValue}
-              updateParentValue={updateParentValue} // Pass the updateParentValue function
+              updateParentValue={updateParentValue}
               isParent={true}
-              updateChildVariance={updateChildVariance} // Pass updateChildVariance to Row component
+              inputValues={inputValues}
+              setInputValues={setInputValues}
             />
           ))}
           <tr>
-            <td>Grand Total</td>
-            <td>{calculateGrandTotal()}</td>
+            <td style={{ textAlign: "center" }}>Grand Total</td>
+            <td colSpan="5" style={{ paddingLeft: "3vw", fontSize: "3vh" }}>{calculateGrandTotal()}</td>
           </tr>
         </tbody>
       </table>
